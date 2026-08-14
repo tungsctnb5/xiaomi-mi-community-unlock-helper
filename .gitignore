@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Build output
+build/
+dist/
+*.log
+
+# Local application/session data
+browser-profile/
+token.txt
+timeshift.txt
+
+# Audited third-party snapshots are documented but not redistributed
+vendor/
+
+# Intermediate icon-generation files
+assets/AppIcon.iconset/
+assets/AppIconRounded.iconset/
+assets/AppIcon.icns
+assets/app-icon.png
+assets/app-icon-rounded.png
+assets/app-icon-chroma.png
