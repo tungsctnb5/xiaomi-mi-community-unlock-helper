@@ -1,0 +1,35 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: Build Windows application
+        run: pyinstaller --noconfirm --clean XiaomiUnlockHelper-Windows.spec
+      - name: Create ZIP
+        shell: pwsh
+        run: Compress-Archive -Path "dist/Xiaomi Mi Community Unlock Helper" -DestinationPath "Xiaomi-Mi-Community-Unlock-Helper-Windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Xiaomi-Mi-Community-Unlock-Helper-Windows-x64
+          path: Xiaomi-Mi-Community-Unlock-Helper-Windows-x64.zip
+          if-no-files-found: error

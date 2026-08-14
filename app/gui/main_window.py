@@ -1,6 +1,5 @@
 import json
 import statistics
-import subprocess
 import sys
 import threading
 from datetime import datetime, timezone, timedelta
@@ -18,8 +17,9 @@ from app.scheduler.dispatcher import ConcurrentAttemptDispatcher
 from app.scheduler.adaptive import fire_offsets_ms,latency_stats
 from app.xiaomi.client import XiaomiClient,stable_device_id
 from app.xiaomi.models import ResultKind
+from app.platform_support import SleepInhibitor,app_data_dir
 
-APPDATA=Path.home()/"Library/Application Support/Xiaomi Unlock Helper"
+APPDATA=app_data_dir()
 
 def resource_path(name):
     base=Path(getattr(sys,"_MEIPASS",Path(__file__).parents[2]))
@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle("Xiaomi Mi Community Unlock Helper"); self.resize(980,820); self.setMinimumSize(880,720); self.setStyleSheet(STYLE)
         self.clock=SyncedClock(); self.scheduler=AttemptScheduler(self.clock); self.dispatcher=None; self.bridge=Bridge(); self.login_window=None; self.logout_profile=None
-        self.prepare_cancel=threading.Event(); self.caffeinate=None; self.outbound_ms=0.0; self.channels=[]
+        self.prepare_cancel=threading.Event(); self.sleep_inhibitor=SleepInhibitor(); self.outbound_ms=0.0; self.channels=[]
         self.token=load_token() or ""; self.device_id=stable_device_id(APPDATA/"device_id"); self.client=None
         self.offsets=[]; self._build(); self._wire(); self._tick(); self._sync_ntp()
         if self.token: self._set_session(f"● Token stored: {mask_token(self.token)}")
@@ -232,12 +232,9 @@ class MainWindow(QMainWindow):
         self._finished("Cancelled")
     def _finished(self,text): self._stop_caffeinate(); self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False); self._log(text)
     def _start_caffeinate(self):
-        if not self.caffeinate or self.caffeinate.poll() is not None:
-            self.caffeinate=subprocess.Popen(["/usr/bin/caffeinate","-dimsu"])
-            self._log("Sleep prevention enabled")
+        self.sleep_inhibitor.start(); self._log("Sleep prevention enabled")
     def _stop_caffeinate(self):
-        if self.caffeinate and self.caffeinate.poll() is None: self.caffeinate.terminate()
-        self.caffeinate=None
+        self.sleep_inhibitor.stop()
     def closeEvent(self,event):
         self.prepare_cancel.set(); self.scheduler.cancel()
         if self.dispatcher: self.dispatcher.cancel(); self.dispatcher.shutdown()

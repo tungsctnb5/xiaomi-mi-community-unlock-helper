@@ -6,12 +6,16 @@ A local-only macOS GUI for making a finite, scheduled Xiaomi Global bootloader a
 
 Download the Apple Silicon ZIP from the repository's **Releases** page, unzip it, and move the app to `/Applications`. The current build supports Apple Silicon and macOS 13 or newer. It bundles Python and all runtime dependencies.
 
+Windows x64 builds are produced on GitHub Actions and published as ZIP release assets. Unzip the complete folder and launch `Xiaomi Mi Community Unlock Helper.exe`; Python is not required. Windows may show a SmartScreen warning because community builds are not code-signed.
+
 ## Run / build
 
 ```bash
 ./build.sh
 ./run.sh
 ```
+
+On Windows, run `build-windows.bat`. PyInstaller builds must run on their target operating system; the included GitHub Actions workflow provides the recommended reproducible Windows builder.
 
 The built app is `dist/Xiaomi Mi Community Unlock Helper.app`. It targets Apple Silicon. If Gatekeeper blocks this unsigned local build, right-click the app and choose **Open**, or use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper globally.
 
