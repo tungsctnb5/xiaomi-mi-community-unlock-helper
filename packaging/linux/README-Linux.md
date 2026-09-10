@@ -33,13 +33,15 @@ sudo apt install libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 \
   libxdamage1 libxrandr2 libxtst6 libnss3 libnspr4 libdbus-1-3 \
   libfontconfig1 libfreetype6 libgl1 libegl1 libgbm1 libdrm2 libxshmfence1 \
   libwayland-server0 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
-  xdg-utils xwayland
+  libgl1-mesa-dri libglx-mesa0 libstdc++6 libgcc-s1 xdg-utils xwayland
 ```
 
 Qt WebEngine also needs ALSA: `sudo apt install libasound2` on Ubuntu 22.04, or
 `sudo apt install libasound2t64` on Ubuntu 24.04. Package names can differ on other
 distributions. A graphical desktop, session D-Bus, and desktop Secret Service
 (for example GNOME Keyring) are needed for persistent credential storage.
+For dependency diagnostics, run `./check-runtime.sh` inside the extracted folder;
+it lists missing libraries across the app, browser renderer and display plugins.
 
 ## Token storage
 
@@ -88,3 +90,6 @@ the bundled browser. It therefore also checks its resources and renderer.
 - [Qt Linux dependencies](https://doc.qt.io/qt-6/linux-requirements.html).
 - [Qt WebEngine sandbox requirements](https://doc.qt.io/qt-6/qtwebengine-platform-notes.html#sandboxing-support).
 - [Ubuntu's per-application user namespace policy](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces).
+- [PyInstaller forward compatibility](https://pyinstaller.org/en/stable/usage.html#making-gnu-linux-apps-forward-compatible):
+  the archive uses the desktop's GCC/C++ runtimes alongside its graphics drivers,
+  preventing an older bundled C++ library from breaking newer Mesa drivers.

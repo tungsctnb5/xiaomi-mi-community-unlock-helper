@@ -23,6 +23,7 @@ fi
 "$build_python" -m PyInstaller --noconfirm --clean XiaomiUnlockHelper-Linux.spec
 package_dir='dist/Xiaomi Mi Community Unlock Helper'
 install -m 755 packaging/linux/launch.sh "$package_dir/launch.sh"
+install -m 755 packaging/linux/check-runtime.sh "$package_dir/check-runtime.sh"
 install -m 755 packaging/linux/enable-browser-sandbox.sh "$package_dir/enable-browser-sandbox.sh"
 install -m 644 packaging/linux/README-Linux.md "$package_dir/README-Linux.md"
 tar -C dist -czf dist/Xiaomi-Mi-Community-Unlock-Helper-Linux-x64.tar.gz 'Xiaomi Mi Community Unlock Helper'

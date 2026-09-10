@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Linux x86_64 one-directory build; Qt's hooks include the sandboxed renderer."""
 import sys
+from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
@@ -28,6 +29,13 @@ a = Analysis(
     ["app/main.py"], pathex=["."], binaries=[], datas=datas,
     hiddenimports=hiddenimports, noarchive=False,
 )
+# Mesa/graphics drivers come from the target desktop and may need a newer C++
+# ABI than the Ubuntu 22.04 builder. Keep GCC runtimes with that driver stack.
+# https://pyinstaller.org/en/stable/usage.html#making-gnu-linux-apps-forward-compatible
+a.binaries = [
+    entry for entry in a.binaries
+    if not Path(entry[0]).name.startswith(("libstdc++.so", "libgcc_s.so"))
+]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True,
