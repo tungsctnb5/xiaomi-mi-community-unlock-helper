@@ -56,6 +56,14 @@ def assert_readable(spin):
     assert spin.parentWidget().rect().contains(spin.geometry())
 
 
+def layout_diagnostics(window):
+    from PySide6.QtWidgets import QWidget
+    widgets = [window.scroll.widget(), *window.scroll.widget().findChildren(QWidget)]
+    return [(type(widget).__name__, widget.objectName(), widget.size().toTuple(),
+             widget.minimumSize().toTuple(), widget.minimumSizeHint().toTuple())
+            for widget in widgets if widget.minimumSizeHint().width() > 250]
+
+
 @pytest.mark.parametrize("size", [(980, 820), (880, 720), (640, 460), (1200, 900)])
 def test_attempt_text_and_controls_fit_at_window_sizes(app, window, size):
     window.resize(*size)
@@ -108,7 +116,7 @@ def test_attempt_values_survive_resize_and_support_editing(app, window):
         settle(app)
         assert [s.value() for s in window.offset_spins] == [-100, 20, 120, 300]
         assert window.attempt_fields.columns == (2 if size[0] == 640 else 4)
-        assert window.scroll.horizontalScrollBar().maximum() == 0
+        assert window.scroll.horizontalScrollBar().maximum() == 0, (size, layout_diagnostics(window))
         for spin in window.offset_spins:
             assert_readable(spin)
 
