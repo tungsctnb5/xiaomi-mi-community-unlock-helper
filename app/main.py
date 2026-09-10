@@ -7,7 +7,16 @@ from app.gui.main_window import MainWindow
 from app.gui.main_window import resource_path
 
 def main():
+    if "--check-browser-sandbox" in sys.argv:
+        from app.auth.linux_sandbox import namespace_probe
+        return namespace_probe()
+    if "--keyring-smoke-test" in sys.argv:
+        from app.auth.store_smoke import run
+        return run()
     app=QApplication(sys.argv); app.setApplicationName("Xiaomi Mi Community Unlock Helper"); app.setApplicationDisplayName("Xiaomi Mi Community Unlock Helper"); app.setOrganizationName("Local"); app.setWindowIcon(QIcon(str(resource_path("app-icon-macos.png"))))
+    if "--webengine-smoke-test" in sys.argv:
+        from app.gui.webengine_smoke import run
+        return run(app)
     smoke_test="--smoke-test" in sys.argv
     window=MainWindow(smoke_test=smoke_test); window.show()
     if smoke_test:

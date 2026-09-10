@@ -2,6 +2,7 @@ from app.auth import keychain
 
 def test_keychain_delete_handles_missing_token(monkeypatch):
     def missing(*args): raise keychain.keyring.errors.PasswordDeleteError("missing")
+    monkeypatch.setattr(keychain,"_backend",lambda:keychain.keyring)
     monkeypatch.setattr(keychain.keyring,"delete_password",missing)
     keychain.delete_token()
 

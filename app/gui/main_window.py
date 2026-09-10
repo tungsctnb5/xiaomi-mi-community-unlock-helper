@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QApplication,QCheckBox,QFileDialog,QFrame,QGridLa
  QMainWindow,QMessageBox,QPlainTextEdit,QPushButton,QScrollArea,QSizePolicy,QVBoxLayout,QWidget)
 from app.gui.attempt_fields import AttemptFields
 from app.auth.browser import LoginWindow,clear_browser_session
-from app.auth.keychain import delete_token,load_token,save_token
+from app.auth.keychain import delete_token,load_token,save_token,storage_error
+from app.auth.linux_sandbox import browser_sandbox_available
 from app.logging.redaction import mask_token,redact_text
 from app.scheduler.clock import SyncedClock,next_beijing_midnight
 from app.scheduler.engine import AttemptScheduler
@@ -18,7 +19,7 @@ from app.scheduler.dispatcher import ConcurrentAttemptDispatcher
 from app.scheduler.adaptive import fire_offsets_ms,latency_stats
 from app.xiaomi.client import XiaomiClient,stable_device_id
 from app.xiaomi.models import ResultKind
-from app.platform_support import SleepInhibitor,app_data_dir
+from app.platform_support import AsyncSleepInhibitor,SleepInhibitor,app_data_dir
 
 APPDATA=app_data_dir()
 
@@ -27,7 +28,7 @@ def resource_path(name):
     return base/"assets"/name
 
 STYLE="""
-QMainWindow, QWidget { background: #111318; color: #e8eaf0; font-family: "Segoe UI", "SF Pro Text", sans-serif; font-size: 13px; }
+QMainWindow, QWidget { background: #111318; color: #e8eaf0; font-family: "Segoe UI", "SF Pro Text", "DejaVu Sans", sans-serif; font-size: 13px; }
 QLabel, QCheckBox { background: transparent; }
 QWidget#attemptFields, QWidget#attemptField { background: transparent; }
 QFrame#card { background: #191c23; border: 1px solid #292d37; border-radius: 12px; }
@@ -35,7 +36,7 @@ QLabel#appTitle { font-size: 25px; font-weight: 700; color: #ffffff; }
 QLabel#subtitle { font-size: 12px; color: #8f96a8; }
 QLabel#sectionTitle { font-size: 13px; font-weight: 700; color: #f1f2f5; }
 QLabel#fieldName { color: #8f96a8; font-size: 12px; }
-QLabel#timeValue { color: #ffffff; font-family: Consolas, Menlo, monospace; font-size: 13px; }
+QLabel#timeValue { color: #ffffff; font-family: Consolas, Menlo, "DejaVu Sans Mono", monospace; font-size: 13px; }
 QLabel#sessionBadge { background: #232730; border: 1px solid #343945; border-radius: 9px; padding: 7px 11px; color: #b7bdca; }
 QPushButton { background: #282c35; border: 1px solid #393e49; border-radius: 8px; padding: 8px 13px; color: #edf0f5; }
 QPushButton:hover { background: #323743; border-color: #505766; }
@@ -47,7 +48,7 @@ QPushButton#danger { color: #ff8181; border-color: #67383d; background: #2b2024;
 QPushButton#quiet { background: transparent; border-color: #30343d; color: #aeb4c1; }
 QCheckBox { color: #e4e7ed; spacing: 8px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
-QSpinBox { background: #101217; border: 1px solid #343945; border-radius: 7px; padding: 8px 36px 8px 12px; color: white; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+QSpinBox { background: #101217; border: 1px solid #343945; border-radius: 7px; padding: 8px 36px 8px 12px; color: white; font-family: Consolas, Menlo, "DejaVu Sans Mono", monospace; font-size: 14px; }
 QSpinBox:focus { border-color: #ff6900; }
 QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 24px; border-left: 1px solid #343945; border-bottom: 1px solid #343945; border-top-right-radius: 7px; background: #282c35; }
 QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 24px; border-left: 1px solid #343945; border-bottom-right-radius: 7px; background: #282c35; }
@@ -66,13 +67,15 @@ class MainWindow(QMainWindow):
     def __init__(self, *, smoke_test=False):
         super().__init__(); self.setWindowTitle("Xiaomi Mi Community Unlock Helper"); self.resize(980,820); self.setMinimumSize(640,460); self.setStyleSheet(STYLE)
         self.clock=SyncedClock(); self.scheduler=AttemptScheduler(self.clock); self.dispatcher=None; self.bridge=Bridge(); self.login_window=None; self.logout_profile=None
-        self.prepare_cancel=threading.Event(); self.sleep_inhibitor=SleepInhibitor(); self.outbound_ms=0.0; self.channels=[]
+        self.prepare_cancel=threading.Event(); self.sleep_inhibitor=AsyncSleepInhibitor() if sys.platform.startswith("linux") else SleepInhibitor(); self.outbound_ms=0.0; self.channels=[]
         self.token="" if smoke_test else load_token() or ""; self.device_id="smoke-test-only" if smoke_test else stable_device_id(APPDATA/"device_id"); self.client=None
         self.offsets=[]; self._build(); self._wire(); self._tick()
         if smoke_test:
             self.ntp_label.setText("Offline build verification")
             for button in (self.login_btn,self.logout_btn,self.paste_btn,self.check_btn,self.start_btn): button.setEnabled(False)
-        else: self._sync_ntp()
+        else:
+            if storage_error(): self._log(storage_error())
+            self._sync_ntp()
         if self.token: self._set_session(f"● Token stored: {mask_token(self.token)}")
     def _build(self):
         root=QWidget(); outer=QVBoxLayout(root); outer.setContentsMargins(24,22,24,20); outer.setSpacing(14)
@@ -115,7 +118,7 @@ class MainWindow(QMainWindow):
         self.start_btn.setObjectName("primary"); self.cancel_btn.setObjectName("danger"); controls.addStretch(); controls.addWidget(self.cancel_btn); controls.addWidget(self.start_btn); execution_layout.addLayout(controls); outer.addWidget(execution)
 
         log_header=QHBoxLayout(); log_title=QLabel("ACTIVITY LOG"); log_title.setObjectName("sectionTitle"); log_header.addWidget(log_title); log_header.addStretch(); outer.addLayout(log_header)
-        self.logbox=QPlainTextEdit(); self.logbox.setReadOnly(True); self.logbox.setFont(QFont("Consolas" if sys.platform=="win32" else "Menlo",11)); self.logbox.setMinimumHeight(120); outer.addWidget(self.logbox,1)
+        self.logbox=QPlainTextEdit(); self.logbox.setReadOnly(True); self.logbox.setFont(QFont("Consolas" if sys.platform=="win32" else "Menlo" if sys.platform=="darwin" else "DejaVu Sans Mono",11)); self.logbox.setMinimumHeight(120); outer.addWidget(self.logbox,1)
         logbuttons=QHBoxLayout(); self.copy_btn=QPushButton("Copy Log"); self.save_btn=QPushButton("Save Log"); self.clear_btn=QPushButton("Clear Log")
         for b in (self.copy_btn,self.save_btn,self.clear_btn): b.setObjectName("quiet"); logbuttons.addWidget(b)
         logbuttons.addStretch(); outer.addLayout(logbuttons)
@@ -142,20 +145,27 @@ class MainWindow(QMainWindow):
             except Exception as e: self.bridge.log.emit(f"NTP sync failed; system clock fallback: {e}")
         threading.Thread(target=work,daemon=True).start()
     def login(self):
+        if not browser_sandbox_available():
+            QMessageBox.warning(self,"Browser sandbox unavailable",
+                "Linux blocked the browser sandbox. Run the app as your normal desktop user. "
+                "On Ubuntu 24.04, the Linux package includes an optional enable-browser-sandbox.sh helper. "
+                "You can also use Paste Token Manually.")
+            return
         self.login_window=LoginWindow(APPDATA/"browser-profile"); self.login_window.token_found.connect(self._browser_token); self.login_window.show(); self._log("Opened isolated Xiaomi login profile; password remains inside Xiaomi's page")
     def logout(self):
         self.prepare_cancel.set(); self.scheduler.cancel()
         if self.dispatcher: self.dispatcher.cancel(); self.dispatcher.shutdown(); self.dispatcher=None
         self._stop_caffeinate()
-        if self.login_window: self.login_window.close(); self.login_window=None
-        delete_token(); self.token=""; self.client=None; self.channels=[]
+        if self.login_window: self.login_window.close(); self.login_window.deleteLater(); self.login_window=None
+        deleted=delete_token(); self.token=""; self.client=None; self.channels=[]
         self.logout_profile=clear_browser_session(APPDATA/"browser-profile",self)
         self._set_session("○ No token — logged out")
         self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
-        self._log("Logged out: Keychain token and isolated Xiaomi browser cookies cleared")
+        self._log("Logged out: saved token and isolated browser session cleared" if deleted else storage_error())
     @Slot(str)
     def _browser_token(self,token):
-        self.token=token; save_token(token); self._set_session(f"● Token captured: {mask_token(token)}"); self._log(f"new_bbs_serviceToken={token}")
+        self.token=token; saved=save_token(token); self._set_session(f"● Token captured: {mask_token(token)}"); self._log(f"new_bbs_serviceToken={token}")
+        if not saved: self._log(storage_error())
         QTimer.singleShot(100,self.check_session)
     def paste(self):
         token,ok=QInputDialog.getText(self,"Paste Token","new_bbs_serviceToken:")
@@ -244,7 +254,9 @@ class MainWindow(QMainWindow):
         self._finished("Cancelled")
     def _finished(self,text): self._stop_caffeinate(); self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False); self._log(text)
     def _start_caffeinate(self):
-        self.sleep_inhibitor.start(); self._log("Sleep prevention enabled")
+        if isinstance(self.sleep_inhibitor,AsyncSleepInhibitor): self.sleep_inhibitor.start(self.bridge.log.emit)
+        elif self.sleep_inhibitor.start(): self._log("Sleep prevention enabled")
+        else: self._log("Sleep prevention unavailable — keep the computer awake while waiting")
     def _stop_caffeinate(self):
         self.sleep_inhibitor.stop()
     def closeEvent(self,event):
