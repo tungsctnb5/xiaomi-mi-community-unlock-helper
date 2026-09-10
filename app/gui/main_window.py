@@ -7,7 +7,8 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont,QIcon,QPixmap
 from PySide6.QtWidgets import (QApplication,QCheckBox,QFileDialog,QFrame,QGridLayout,QHBoxLayout,QInputDialog,QLabel,
- QMainWindow,QMessageBox,QPlainTextEdit,QPushButton,QSizePolicy,QSpinBox,QVBoxLayout,QWidget)
+ QMainWindow,QMessageBox,QPlainTextEdit,QPushButton,QScrollArea,QSizePolicy,QVBoxLayout,QWidget)
+from app.gui.attempt_fields import AttemptFields
 from app.auth.browser import LoginWindow,clear_browser_session
 from app.auth.keychain import delete_token,load_token,save_token
 from app.logging.redaction import mask_token,redact_text
@@ -26,14 +27,15 @@ def resource_path(name):
     return base/"assets"/name
 
 STYLE="""
-QMainWindow, QWidget { background: #111318; color: #e8eaf0; font-family: -apple-system, "SF Pro Text"; font-size: 13px; }
+QMainWindow, QWidget { background: #111318; color: #e8eaf0; font-family: "Segoe UI", "SF Pro Text", sans-serif; font-size: 13px; }
 QLabel, QCheckBox { background: transparent; }
+QWidget#attemptFields, QWidget#attemptField { background: transparent; }
 QFrame#card { background: #191c23; border: 1px solid #292d37; border-radius: 12px; }
 QLabel#appTitle { font-size: 25px; font-weight: 700; color: #ffffff; }
 QLabel#subtitle { font-size: 12px; color: #8f96a8; }
 QLabel#sectionTitle { font-size: 13px; font-weight: 700; color: #f1f2f5; }
 QLabel#fieldName { color: #8f96a8; font-size: 12px; }
-QLabel#timeValue { color: #ffffff; font-family: Menlo; font-size: 13px; }
+QLabel#timeValue { color: #ffffff; font-family: Consolas, Menlo, monospace; font-size: 13px; }
 QLabel#sessionBadge { background: #232730; border: 1px solid #343945; border-radius: 9px; padding: 7px 11px; color: #b7bdca; }
 QPushButton { background: #282c35; border: 1px solid #393e49; border-radius: 8px; padding: 8px 13px; color: #edf0f5; }
 QPushButton:hover { background: #323743; border-color: #505766; }
@@ -45,37 +47,51 @@ QPushButton#danger { color: #ff8181; border-color: #67383d; background: #2b2024;
 QPushButton#quiet { background: transparent; border-color: #30343d; color: #aeb4c1; }
 QCheckBox { color: #e4e7ed; spacing: 8px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
-QSpinBox { background: #101217; border: 1px solid #343945; border-radius: 7px; padding: 8px 12px; color: white; font-family: Menlo; font-size: 13px; }
+QSpinBox { background: #101217; border: 1px solid #343945; border-radius: 7px; padding: 8px 36px 8px 12px; color: white; font-family: Consolas, Menlo, monospace; font-size: 14px; }
+QSpinBox:focus { border-color: #ff6900; }
+QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 24px; border-left: 1px solid #343945; border-bottom: 1px solid #343945; border-top-right-radius: 7px; background: #282c35; }
+QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 24px; border-left: 1px solid #343945; border-bottom-right-radius: 7px; background: #282c35; }
+QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #424958; }
 QPlainTextEdit { background: #0b0d11; border: 1px solid #292d37; border-radius: 10px; padding: 10px; color: #cdd3df; selection-background-color: #78411e; }
 """
+STYLE += f'''
+QSpinBox::up-arrow {{ image: url("{resource_path("chevron-up.svg").as_posix()}"); width: 12px; height: 8px; }}
+QSpinBox::down-arrow {{ image: url("{resource_path("chevron-down.svg").as_posix()}"); width: 12px; height: 8px; }}
+'''
 
 class Bridge(QObject):
     log=Signal(str); session=Signal(str); done=Signal(str); ntp=Signal(float,float,str)
 
 class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__(); self.setWindowTitle("Xiaomi Mi Community Unlock Helper"); self.resize(980,820); self.setMinimumSize(880,720); self.setStyleSheet(STYLE)
+    def __init__(self, *, smoke_test=False):
+        super().__init__(); self.setWindowTitle("Xiaomi Mi Community Unlock Helper"); self.resize(980,820); self.setMinimumSize(640,460); self.setStyleSheet(STYLE)
         self.clock=SyncedClock(); self.scheduler=AttemptScheduler(self.clock); self.dispatcher=None; self.bridge=Bridge(); self.login_window=None; self.logout_profile=None
         self.prepare_cancel=threading.Event(); self.sleep_inhibitor=SleepInhibitor(); self.outbound_ms=0.0; self.channels=[]
-        self.token=load_token() or ""; self.device_id=stable_device_id(APPDATA/"device_id"); self.client=None
-        self.offsets=[]; self._build(); self._wire(); self._tick(); self._sync_ntp()
+        self.token="" if smoke_test else load_token() or ""; self.device_id="smoke-test-only" if smoke_test else stable_device_id(APPDATA/"device_id"); self.client=None
+        self.offsets=[]; self._build(); self._wire(); self._tick()
+        if smoke_test:
+            self.ntp_label.setText("Offline build verification")
+            for button in (self.login_btn,self.logout_btn,self.paste_btn,self.check_btn,self.start_btn): button.setEnabled(False)
+        else: self._sync_ntp()
         if self.token: self._set_session(f"● Token stored: {mask_token(self.token)}")
     def _build(self):
-        root=QWidget(); outer=QVBoxLayout(root); outer.setContentsMargins(24,22,24,20); outer.setSpacing(14); self.setCentralWidget(root)
+        root=QWidget(); outer=QVBoxLayout(root); outer.setContentsMargins(24,22,24,20); outer.setSpacing(14)
+        self.scroll=QScrollArea(); self.scroll.setWidgetResizable(True); self.scroll.setFrameShape(QFrame.NoFrame); self.scroll.setWidget(root); self.setCentralWidget(self.scroll)
         header=QHBoxLayout(); header.setSpacing(13)
         logo=QLabel(); logo.setFixedSize(56,56); logo.setPixmap(QPixmap(str(resource_path("app-icon-macos.png"))).scaled(56,56,Qt.KeepAspectRatio,Qt.SmoothTransformation)); header.addWidget(logo)
         brand=QVBoxLayout(); brand.setSpacing(2)
         title=QLabel("Xiaomi Mi Community Unlock Helper"); title.setObjectName("appTitle")
         subtitle=QLabel("Precision application scheduler  •  Local-only credentials  •  Beijing time") ; subtitle.setObjectName("subtitle")
-        brand.addWidget(title); brand.addWidget(subtitle); header.addLayout(brand); header.addStretch(); outer.addLayout(header)
+        title.setWordWrap(True); subtitle.setWordWrap(True)
+        brand.addWidget(title); brand.addWidget(subtitle); header.addLayout(brand,1); outer.addLayout(header)
 
         account=self._card(); account_layout=QVBoxLayout(account); account_layout.setContentsMargins(16,14,16,14); account_layout.setSpacing(11)
         section=QLabel("ACCOUNT & SESSION"); section.setObjectName("sectionTitle"); account_layout.addWidget(section)
-        account_row=QHBoxLayout(); account_row.setSpacing(8)
+        account_row=QGridLayout(); account_row.setSpacing(8)
         self.login_btn=QPushButton("Add / Login Xiaomi"); self.logout_btn=QPushButton("Logout Xiaomi"); self.paste_btn=QPushButton("Paste Token Manually"); self.check_btn=QPushButton("Check Session")
         self.login_btn.setObjectName("primary"); self.logout_btn.setObjectName("quiet"); self.paste_btn.setObjectName("quiet")
-        for button in (self.login_btn,self.logout_btn,self.paste_btn,self.check_btn): account_row.addWidget(button)
-        account_row.addStretch(); account_layout.addLayout(account_row)
+        for index,button in enumerate((self.login_btn,self.logout_btn,self.paste_btn,self.check_btn)): account_row.addWidget(button,index//2,index%2)
+        account_layout.addLayout(account_row)
         self.session_label=QLabel("○ No token"); self.session_label.setObjectName("sessionBadge"); account_layout.addWidget(self.session_label)
         outer.addWidget(account)
 
@@ -92,23 +108,19 @@ class MainWindow(QMainWindow):
         execution=self._card(); execution_layout=QVBoxLayout(execution); execution_layout.setContentsMargins(16,14,16,14); execution_layout.setSpacing(12)
         top=QHBoxLayout(); section=QLabel("ADAPTIVE EXECUTION"); section.setObjectName("sectionTitle"); top.addWidget(section); top.addStretch()
         self.adaptive=QCheckBox("Adaptive server-arrival timing"); self.adaptive.setChecked(True); top.addWidget(self.adaptive); execution_layout.addLayout(top)
-        hint=QLabel("Desired arrival at Xiaomi server, relative to Beijing midnight"); hint.setObjectName("subtitle"); execution_layout.addWidget(hint)
-        attempt_grid=QGridLayout(); attempt_grid.setHorizontalSpacing(12); self.offset_spins=[]
-        for i,value in enumerate((-100,20,120,300)):
-            label=QLabel(f"Attempt {i+1}"); label.setObjectName("fieldName"); attempt_grid.addWidget(label,0,i)
-            spin=QSpinBox(); spin.setRange(-2000,5000); spin.setValue(value); spin.setSuffix(" ms"); spin.setMinimumWidth(150); spin.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed); spin.setAlignment(Qt.AlignCenter); self.offset_spins.append(spin); attempt_grid.addWidget(spin,1,i)
-            attempt_grid.setColumnStretch(i,1)
-        execution_layout.addLayout(attempt_grid)
+        hint=QLabel("Desired arrival at Xiaomi server, relative to Beijing midnight"); hint.setObjectName("subtitle"); hint.setWordWrap(True); execution_layout.addWidget(hint)
+        self.attempt_fields=AttemptFields(); self.offset_spins=self.attempt_fields.spins
+        execution_layout.addWidget(self.attempt_fields)
         controls=QHBoxLayout(); self.start_btn=QPushButton("START WAITING (LIVE)"); self.cancel_btn=QPushButton("EMERGENCY CANCEL"); self.cancel_btn.setEnabled(False)
         self.start_btn.setObjectName("primary"); self.cancel_btn.setObjectName("danger"); controls.addStretch(); controls.addWidget(self.cancel_btn); controls.addWidget(self.start_btn); execution_layout.addLayout(controls); outer.addWidget(execution)
 
         log_header=QHBoxLayout(); log_title=QLabel("ACTIVITY LOG"); log_title.setObjectName("sectionTitle"); log_header.addWidget(log_title); log_header.addStretch(); outer.addLayout(log_header)
-        self.logbox=QPlainTextEdit(); self.logbox.setReadOnly(True); self.logbox.setFont(QFont("Menlo",11)); outer.addWidget(self.logbox,1)
+        self.logbox=QPlainTextEdit(); self.logbox.setReadOnly(True); self.logbox.setFont(QFont("Consolas" if sys.platform=="win32" else "Menlo",11)); self.logbox.setMinimumHeight(120); outer.addWidget(self.logbox,1)
         logbuttons=QHBoxLayout(); self.copy_btn=QPushButton("Copy Log"); self.save_btn=QPushButton("Save Log"); self.clear_btn=QPushButton("Clear Log")
         for b in (self.copy_btn,self.save_btn,self.clear_btn): b.setObjectName("quiet"); logbuttons.addWidget(b)
         logbuttons.addStretch(); outer.addLayout(logbuttons)
     def _card(self):
-        card=QFrame(); card.setObjectName("card"); return card
+        card=QFrame(); card.setObjectName("card"); card.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Minimum); return card
     def _wire(self):
         self.bridge.log.connect(self._log); self.bridge.session.connect(self._set_session); self.bridge.done.connect(self._finished); self.bridge.ntp.connect(lambda o,d,s:self.ntp_label.setText(f"{o*1000:+.3f} ms / {d*1000:.1f} ms ({s})"))
         self.login_btn.clicked.connect(self.login); self.logout_btn.clicked.connect(self.logout); self.paste_btn.clicked.connect(self.paste); self.check_btn.clicked.connect(self.check_session); self.start_btn.clicked.connect(self.start); self.cancel_btn.clicked.connect(self.cancel)

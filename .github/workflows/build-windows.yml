@@ -23,8 +23,42 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q
+      - name: Check native Windows layout at common display scales
+        shell: pwsh
+        run: |
+          Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+          $layoutFailed = $false
+          foreach ($scale in @("1", "1.25", "1.5", "2")) {
+            $env:QT_SCALE_FACTOR = $scale
+            $env:XIAOMI_LAYOUT_ARTIFACTS = Join-Path $env:RUNNER_TEMP "xiaomi-layout/scale-$scale"
+            Write-Host "Checking native Windows layout at $scale display scale"
+            python -m pytest -q tests/test_execution_layout.py
+            if ($LASTEXITCODE -ne 0) { $layoutFailed = $true }
+          }
+          if ($layoutFailed) { exit 1 }
+      - name: Upload Windows layout screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-layout-screenshots
+          path: ${{ runner.temp }}/xiaomi-layout/
+          if-no-files-found: warn
       - name: Build Windows application
         run: pyinstaller --noconfirm --clean XiaomiUnlockHelper-Windows.spec
+      - name: Smoke-test packaged Windows application
+        shell: pwsh
+        run: |
+          $appPath = Join-Path $PWD "dist/Xiaomi Mi Community Unlock Helper/Xiaomi Mi Community Unlock Helper.exe"
+          $smokeProcess = Start-Process -FilePath $appPath -ArgumentList "--smoke-test" -PassThru
+          if (-not $smokeProcess.WaitForExit(30000)) {
+            Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Packaged application did not finish its smoke test within 30 seconds."
+          }
+          $smokeProcess.WaitForExit()
+          $smokeProcess.Refresh()
+          if ($smokeProcess.ExitCode -ne 0) {
+            throw "Packaged application smoke test failed with exit code $($smokeProcess.ExitCode)."
+          }
       - name: Create ZIP
         shell: pwsh
         run: Compress-Archive -Path "dist/Xiaomi Mi Community Unlock Helper" -DestinationPath "Xiaomi-Mi-Community-Unlock-Helper-Windows-x64.zip"

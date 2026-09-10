@@ -10,8 +10,8 @@ Choose the package for your operating system from [GitHub Releases](https://gith
 
 | Platform | Requirements | Package |
 |---|---|---|
-| macOS | Apple Silicon (M1 or newer), macOS 13+ | `Xiaomi-Mi-Community-Unlock-Helper-macOS-arm64.zip` |
-| Windows | Windows 10/11 x64 | `Xiaomi-Mi-Community-Unlock-Helper-Windows-x64.zip` |
+| macOS | Apple Silicon (M1 or newer), macOS 13+ | [Download macOS ZIP](https://github.com/tungsctnb5/xiaomi-mi-community-unlock-helper/releases/latest/download/Xiaomi-Mi-Community-Unlock-Helper-macOS-arm64.zip) |
+| Windows | Windows 10/11 x64 | [Download Windows ZIP](https://github.com/tungsctnb5/xiaomi-mi-community-unlock-helper/releases/latest/download/Xiaomi-Mi-Community-Unlock-Helper-Windows-x64.zip) |
 
 Python, PySide6, and all runtime dependencies are bundled in both packages.
 
@@ -22,6 +22,8 @@ Unzip the macOS package and move the app to `/Applications`. If Gatekeeper block
 ### Windows
 
 Unzip the **entire** Windows package, open its application folder, and launch `Xiaomi Mi Community Unlock Helper.exe`. If SmartScreen appears, choose **More info → Run anyway**. Do not move the `.exe` away from its `_internal` folder.
+
+Version 1.1.1 fixes compressed Adaptive Execution inputs on Windows. Attempt values keep enough space for the full signed number and `ms`; compact windows use two rows, and shorter windows scroll. To update, close the old app and extract the new ZIP into a fresh folder, then launch that copy.
 
 ## Run / build
 
@@ -51,3 +53,5 @@ Use this only for your own account and device, within Xiaomi's terms and local l
 ## Tests
 
 Tests use mock sessions and fake tokens only. They cover redaction, state/apply parsing, expiry, quota, NTP offset, four finite firings, cancellation, terminal stop, and timeout handling.
+
+Windows builds also check the displayed layout at 100%, 125%, 150%, and 200% scaling, including window resizing, text visibility, and keyboard/step-button editing. The packaged executable runs an offline `--smoke-test` before it is archived; this check does not load credentials or contact Xiaomi/NTP.

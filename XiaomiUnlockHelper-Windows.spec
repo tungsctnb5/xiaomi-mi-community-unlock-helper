@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
-datas=[("assets/app-icon-macos.png","assets")]; binaries=[]; hiddenimports=[]
+datas=[("assets/app-icon-macos.png","assets"),("assets/chevron-up.svg","assets"),("assets/chevron-down.svg","assets")]; binaries=[]; hiddenimports=[]
 for pkg in ("PySide6.QtWebEngineCore","PySide6.QtWebEngineWidgets","keyring.backends.Windows"):
     d,b,h=collect_all(pkg); datas+=d; binaries+=b; hiddenimports+=h
 a=Analysis(["app/main.py"],pathex=["."],binaries=binaries,datas=datas,hiddenimports=hiddenimports,noarchive=False)
