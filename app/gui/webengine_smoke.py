@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QTimer, QUrl
 from PySide6.QtNetwork import QNetworkCookie
 
 from app.auth.browser import LoginWindow
@@ -49,6 +49,5 @@ def run(app):
     QTimer.singleShot(15000, lambda: finish(False))
     window.show()
     result = app.exec()
-    # Delete the page before its parent-owned profile.
-    window.view.close()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     return result if finished else 1

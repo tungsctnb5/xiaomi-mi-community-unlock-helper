@@ -13,7 +13,7 @@ class LoginWindow(QMainWindow):
     token_found=Signal(str)
     def __init__(self, profile_dir:Path, *, offline=False):
         super().__init__(); self.setWindowTitle("Xiaomi Login — private application profile"); self.resize(1000,760)
-        self._captured=False
+        self._captured=False; self._closed=False
         if offline or sys.platform.startswith("linux"):
             # Linux credentials persist only in Secret Service, not browser cookie files.
             self.profile=QWebEngineProfile(self)
@@ -44,6 +44,15 @@ class LoginWindow(QMainWindow):
     def _loaded(self,ok):
         if not ok and not self._captured:
             self.statusBar().showMessage("Xiaomi page failed to load. Close and try again.")
+
+    def closeEvent(self, event):
+        if not self._closed:
+            self._closed=True
+            self.view.stop()
+            # Qt requires every page to be destroyed before its browser profile.
+            self.view.page().deleteLater()
+            self.profile.deleteLater()
+        super().closeEvent(event)
 
 
 def clear_browser_session(profile_dir: Path, parent=None):
