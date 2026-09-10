@@ -1,5 +1,6 @@
 """Shown-window regressions; CI also runs these on native Windows at four scales."""
 
+import json
 import os
 from pathlib import Path
 
@@ -43,6 +44,8 @@ def save_screenshot(window, name):
         target = Path(folder)
         target.mkdir(parents=True, exist_ok=True)
         assert window.grab().save(str(target / f"{name}.png"))
+        (target / f"{name}.json").write_text(
+            json.dumps(layout_diagnostics(window), indent=2), encoding="utf-8")
 
 
 def assert_readable(spin):
@@ -59,15 +62,33 @@ def assert_readable(spin):
 def layout_diagnostics(window):
     from PySide6.QtWidgets import QWidget
     widgets = [window.scroll.widget(), *window.scroll.widget().findChildren(QWidget)]
-    return [(type(widget).__name__, widget.objectName(), widget.size().toTuple(),
-             widget.minimumSize().toTuple(), widget.minimumSizeHint().toTuple())
-            for widget in widgets if widget.minimumSizeHint().width() > 250]
+    return {
+        "window": window.size().toTuple(),
+        "viewport": window.scroll.viewport().size().toTuple(),
+        "screen": window.screen().availableGeometry().getRect(),
+        "device_pixel_ratio": window.devicePixelRatioF(),
+        "platform": QApplication.platformName(),
+        "style": QApplication.style().objectName(),
+        "widgets": [(type(widget).__name__, widget.objectName(), widget.size().toTuple(),
+                     widget.minimumSize().toTuple(), widget.minimumSizeHint().toTuple())
+                    for widget in widgets if widget.minimumSizeHint().width() > 250],
+    }
+
+
+def assert_responsive_columns(window):
+    # Use the actual logical window width: Windows can constrain initial geometry
+    # on small desktops, particularly when display scaling is set to 200%.
+    if window.width() <= 640:
+        assert window.attempt_fields.columns == 2, layout_diagnostics(window)
+    elif window.width() >= 980:
+        assert window.attempt_fields.columns == 4, layout_diagnostics(window)
 
 
 @pytest.mark.parametrize("size", [(980, 820), (880, 720), (640, 460), (1200, 900)])
 def test_attempt_text_and_controls_fit_at_window_sizes(app, window, size):
-    window.resize(*size)
     window.show()
+    settle(app)
+    window.resize(*size)
     settle(app)
     window.scroll.ensureWidgetVisible(window.attempt_fields)
     settle(app)
@@ -82,11 +103,10 @@ def test_attempt_text_and_controls_fit_at_window_sizes(app, window, size):
         for control in (window.adaptive, window.start_btn, window.cancel_btn):
             assert control.height() >= control.sizeHint().height()
             assert control.width() >= control.sizeHint().width()
-        if size == (640, 460):
-            assert window.attempt_fields.columns == 2
+        assert_responsive_columns(window)
+        assert window.scroll.horizontalScrollBar().maximum() == 0, layout_diagnostics(window)
+        if window.height() <= 460:
             assert window.scroll.verticalScrollBar().maximum() > 0
-        if size == (1200, 900):
-            assert window.attempt_fields.columns == 4
     finally:
         for spin, value in zip(window.offset_spins, (-100, 20, 120, 300)):
             spin.setValue(value)
@@ -95,11 +115,12 @@ def test_attempt_text_and_controls_fit_at_window_sizes(app, window, size):
 
 def test_fields_remain_readable_across_qt_styles(app, window):
     original = app.style().objectName()
+    window.show()
+    settle(app)
     try:
         for style in QStyleFactory.keys():
             app.setStyle(style)
             window.resize(880, 720)
-            window.show()
             settle(app)
             for spin in window.offset_spins:
                 spin.setValue(-2000)
@@ -115,7 +136,7 @@ def test_attempt_values_survive_resize_and_support_editing(app, window):
         window.resize(*size)
         settle(app)
         assert [s.value() for s in window.offset_spins] == [-100, 20, 120, 300]
-        assert window.attempt_fields.columns == (2 if size[0] == 640 else 4)
+        assert_responsive_columns(window)
         assert window.scroll.horizontalScrollBar().maximum() == 0, (size, layout_diagnostics(window))
         for spin in window.offset_spins:
             assert_readable(spin)
