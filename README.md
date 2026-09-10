@@ -1,8 +1,28 @@
 # Xiaomi Mi Community Unlock Helper
 
-A cross-platform desktop GUI for submitting a finite, precisely scheduled Xiaomi Global Mi Community bootloader authorization application. Available for **macOS Apple Silicon**, **Windows x64**, and **Linux x64**.
+## English
 
-It does **not** unlock a device by itself, bypass Xiaomi account eligibility, or guarantee quota availability. Use it only with your own Xiaomi account and devices.
+An unofficial desktop helper for scheduling Xiaomi Community Global bootloader-unlock permission applications. Available for **macOS Apple Silicon**, **Windows x64**, and **Linux x64**, with session management, time synchronization and up to four scheduled attempts.
+
+No phone-model, device-generation or phone-OS selection is required: the helper submits an account-level application instead of interacting with a handset or its ROM. It is intended for eligible **Xiaomi, Redmi and POCO** users, including **MIUI and HyperOS** users where the Global Community authorization flow applies.
+
+This does not guarantee compatibility or approval for every model, system version or region. Xiaomi controls eligibility, quotas and waiting periods; some MIUI devices may use the original unlock process instead. This helper does not implement the Mainland China application flow, unlock a phone itself or bypass Xiaomi's restrictions. Use it only with your own account and devices. [Xiaomi's eligibility guidance](https://www.mi.com/global/support/faq/details/KA-07238/).
+
+## 简体中文
+
+用于定时提交小米社区国际版（Xiaomi Community Global）Bootloader 解锁资格申请的非官方桌面辅助工具。提供 **macOS Apple Silicon、Windows x64 和 Linux x64** 版本，支持会话管理、时间同步及最多四次定时申请。
+
+无需选择手机型号、设备代际或手机操作系统：工具按小米账号提交申请，不直接操作手机或 ROM。面向符合申请条件的 **小米、Redmi 和 POCO** 用户，包括适用国际版社区授权流程的 **MIUI 和 HyperOS（小米澎湃 OS）** 用户。
+
+这不代表所有机型、系统版本或地区都兼容或一定能通过审核。申请资格、名额和等待时间由小米决定；部分 MIUI 设备可能沿用原有解锁流程。本工具不提供中国大陆版申请流程，不直接解锁手机，也不绕过小米限制。请仅用于自己的账号和设备。[小米官方资格说明](https://www.mi.com/global/support/faq/details/KA-07238/)。
+
+## Tiếng Việt
+
+Công cụ desktop không chính thức giúp hẹn giờ gửi đơn đăng ký quyền mở khóa bootloader qua Xiaomi Community Global. Có bản cho **macOS Apple Silicon**, **Windows x64** và **Linux x64**, với quản lý phiên đăng nhập, đồng bộ thời gian và tối đa bốn lượt gửi theo lịch.
+
+Không cần chọn model, thế hệ máy hay hệ điều hành điện thoại: tool gửi yêu cầu ở cấp tài khoản, không thao tác trực tiếp với điện thoại hoặc ROM. Dành cho người dùng **Xiaomi, Redmi và POCO** đủ điều kiện, bao gồm **MIUI và HyperOS** khi quy trình cấp quyền của Xiaomi Community Global áp dụng.
+
+Điều này không bảo đảm mọi model, phiên bản hệ điều hành hay khu vực đều tương thích hoặc được duyệt. Xiaomi quyết định điều kiện, hạn ngạch và thời gian chờ; một số máy MIUI có thể dùng quy trình unlock cũ. Tool không triển khai luồng đăng ký dành cho Trung Quốc đại lục, không tự mở khóa điện thoại và không vượt qua giới hạn của Xiaomi. Chỉ sử dụng với tài khoản và thiết bị của bạn. [Điều kiện từ Xiaomi](https://www.mi.com/global/support/faq/details/KA-07238/).
 
 ## Download
 

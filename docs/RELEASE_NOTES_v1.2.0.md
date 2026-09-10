@@ -1,3 +1,21 @@
+## English
+
+An unofficial desktop helper for scheduling Xiaomi Community Global bootloader-unlock permission applications. Available for macOS Apple Silicon, Windows x64 and Linux x64.
+
+Its account-based workflow requires no phone-model, generation or phone-OS selection. It is intended for eligible Xiaomi, Redmi and POCO users, including MIUI and HyperOS users where the Global authorization flow applies. It does not guarantee support or approval for every model, OS version or region, implement the Mainland China application flow, unlock phones itself or bypass Xiaomi's restrictions. Some MIUI devices may use the original unlock process instead. [Xiaomi's eligibility guidance](https://www.mi.com/global/support/faq/details/KA-07238/).
+
+## 简体中文
+
+用于定时提交小米社区国际版（Xiaomi Community Global）Bootloader 解锁资格申请的非官方桌面辅助工具，提供 macOS Apple Silicon、Windows x64 和 Linux x64 版本。
+
+工具按账号提交申请，无需选择手机型号、设备代际或手机操作系统。面向符合申请条件的小米、Redmi 和 POCO 用户，包括适用国际版授权流程的 MIUI 和 HyperOS（小米澎湃 OS）用户。不保证所有机型、系统版本或地区都受支持或能通过审核，不提供中国大陆版申请流程，不直接解锁手机，也不绕过小米限制。部分 MIUI 设备可能沿用原有解锁流程。[小米官方资格说明](https://www.mi.com/global/support/faq/details/KA-07238/)。
+
+## Tiếng Việt
+
+Công cụ desktop không chính thức giúp hẹn giờ đăng ký quyền mở khóa bootloader qua Xiaomi Community Global, có bản cho macOS Apple Silicon, Windows x64 và Linux x64.
+
+Tool gửi yêu cầu ở cấp tài khoản, không cần chọn model, thế hệ máy hay hệ điều hành điện thoại. Dành cho người dùng Xiaomi, Redmi và POCO đủ điều kiện, gồm MIUI và HyperOS khi luồng cấp quyền Global áp dụng. Không bảo đảm mọi model, phiên bản OS hay khu vực đều được hỗ trợ hoặc được duyệt; không triển khai luồng đăng ký Trung Quốc đại lục, không tự unlock điện thoại và không vượt giới hạn của Xiaomi. Một số máy MIUI có thể dùng quy trình unlock cũ. [Điều kiện từ Xiaomi](https://www.mi.com/global/support/faq/details/KA-07238/).
+
 ## Downloads — macOS, Windows and Linux
 
 | Platform | Download |
