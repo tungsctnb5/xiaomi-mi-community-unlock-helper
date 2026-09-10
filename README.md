@@ -2,7 +2,7 @@
 
 ## English
 
-An unofficial desktop helper for scheduling Xiaomi Community Global bootloader-unlock permission applications. Available for **macOS Apple Silicon**, **Windows x64**, and **Linux x64**, with session management, time synchronization and up to four scheduled attempts.
+An independently developed desktop application for scheduling Xiaomi Community Global bootloader-unlock permission applications. Available for **macOS Apple Silicon**, **Windows x64**, and **Linux x64**, with session management, time synchronization and up to four scheduled attempts.
 
 No phone-model, device-generation or phone-OS selection is required: the helper submits an account-level application instead of interacting with a handset or its ROM. It is intended for eligible **Xiaomi, Redmi and POCO** users, including **MIUI and HyperOS** users where the Global Community authorization flow applies.
 
@@ -10,7 +10,7 @@ This does not guarantee compatibility or approval for every model, system versio
 
 ## 简体中文
 
-用于定时提交小米社区国际版（Xiaomi Community Global）Bootloader 解锁资格申请的非官方桌面辅助工具。提供 **macOS Apple Silicon、Windows x64 和 Linux x64** 版本，支持会话管理、时间同步及最多四次定时申请。
+独立开发的桌面应用，用于定时提交小米社区国际版（Xiaomi Community Global）Bootloader 解锁资格申请。提供 **macOS Apple Silicon、Windows x64 和 Linux x64** 版本，支持会话管理、时间同步及最多四次定时申请。
 
 无需选择手机型号、设备代际或手机操作系统：工具按小米账号提交申请，不直接操作手机或 ROM。面向符合申请条件的 **小米、Redmi 和 POCO** 用户，包括适用国际版社区授权流程的 **MIUI 和 HyperOS（小米澎湃 OS）** 用户。
 
@@ -18,7 +18,7 @@ This does not guarantee compatibility or approval for every model, system versio
 
 ## Tiếng Việt
 
-Công cụ desktop không chính thức giúp hẹn giờ gửi đơn đăng ký quyền mở khóa bootloader qua Xiaomi Community Global. Có bản cho **macOS Apple Silicon**, **Windows x64** và **Linux x64**, với quản lý phiên đăng nhập, đồng bộ thời gian và tối đa bốn lượt gửi theo lịch.
+Ứng dụng desktop được phát triển độc lập, giúp hẹn giờ gửi đơn đăng ký quyền mở khóa bootloader qua Xiaomi Community Global. Có bản cho **macOS Apple Silicon**, **Windows x64** và **Linux x64**, với quản lý phiên đăng nhập, đồng bộ thời gian và tối đa bốn lượt gửi theo lịch.
 
 Không cần chọn model, thế hệ máy hay hệ điều hành điện thoại: tool gửi yêu cầu ở cấp tài khoản, không thao tác trực tiếp với điện thoại hoặc ROM. Dành cho người dùng **Xiaomi, Redmi và POCO** đủ điều kiện, bao gồm **MIUI và HyperOS** khi quy trình cấp quyền của Xiaomi Community Global áp dụng.
 
@@ -86,3 +86,11 @@ Tests use mock sessions and fake tokens only. They cover redaction, state/apply 
 Windows builds also check the displayed layout at 100%, 125%, 150%, and 200% scaling, including window resizing, text visibility, and keyboard/step-button editing. The packaged executable runs an offline `--smoke-test` before it is archived; this check does not load credentials or contact Xiaomi/NTP.
 
 Linux runs the same four-scale layout checks under X11. The extracted package is checked on Ubuntu 22.04 and 24.04 for GUI launch, sandboxed HTML rendering/JavaScript/HttpOnly-cookie capture, and a Secret Service roundtrip with synthetic data in an isolated temporary keyring. Mocked tests cover missing/locked storage, cancellation during Linux sleep-inhibitor acquisition, and cleanup.
+
+## About this project / 项目说明 / Về dự án
+
+Developed and published by this project's author. This is an independent project, not a Xiaomi product.
+
+本应用由项目作者开发并发布，是独立项目，并非小米公司出品。
+
+Ứng dụng do tác giả dự án phát triển và phát hành. Đây là dự án độc lập, không phải sản phẩm do Xiaomi phát hành.
