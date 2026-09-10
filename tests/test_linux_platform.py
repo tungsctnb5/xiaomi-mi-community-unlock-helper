@@ -9,7 +9,9 @@ from app import platform_support as platform
 
 @pytest.fixture
 def linux(monkeypatch):
-    monkeypatch.setattr(platform.sys, "platform", "linux")
+    # Replace only the module's view of the OS. Mutating shared sys.platform
+    # makes pytest's tmp_path fixture call Unix-only APIs on Windows runners.
+    monkeypatch.setattr(platform, "sys", SimpleNamespace(platform="linux"))
 
 
 @pytest.fixture
@@ -119,7 +121,7 @@ def test_linux_stalled_helper_is_terminated_as_owned_process_group(monkeypatch, 
 
 def test_windows_api_failure_does_not_report_success(monkeypatch):
     import ctypes
-    monkeypatch.setattr(platform.sys, "platform", "win32")
+    monkeypatch.setattr(platform, "sys", SimpleNamespace(platform="win32"))
     execution_state = Mock(return_value=0)
     monkeypatch.setattr(ctypes, "windll", SimpleNamespace(
         kernel32=SimpleNamespace(SetThreadExecutionState=execution_state)
@@ -130,7 +132,7 @@ def test_windows_api_failure_does_not_report_success(monkeypatch):
 
 
 def test_macos_start_reports_process_launch_failure(monkeypatch):
-    monkeypatch.setattr(platform.sys, "platform", "darwin")
+    monkeypatch.setattr(platform, "sys", SimpleNamespace(platform="darwin"))
     monkeypatch.setattr(platform.subprocess, "Popen", Mock(side_effect=OSError("missing")))
     inhibitor = platform.SleepInhibitor()
     assert inhibitor.start() is False

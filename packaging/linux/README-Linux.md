@@ -32,6 +32,7 @@ sudo apt install libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 \
   libxcb-shm0 libxcb-glx0 libx11-xcb1 libxrender1 libxi6 libxcomposite1 \
   libxdamage1 libxrandr2 libxtst6 libnss3 libnspr4 libdbus-1-3 \
   libfontconfig1 libfreetype6 libgl1 libegl1 libgbm1 libdrm2 libxshmfence1 \
+  libwayland-server0 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
   xdg-utils xwayland
 ```
 
