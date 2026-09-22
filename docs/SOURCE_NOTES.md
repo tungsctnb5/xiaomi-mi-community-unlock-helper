@@ -26,6 +26,8 @@ This is an application improvement, not a behavior copied from the community loo
 
 The profile is refreshed close to Beijing midnight using the final state checks and warmed live channels. RTT/2 cannot reveal route asymmetry or Xiaomi's internal queue time, so the UI labels it as an estimate and does not promise an exact server-arrival timestamp.
 
+Since v1.3.1 these timing targets are internal. The GUI deliberately has no editable timing fields or adaptive/fallback switch: Start always obtains a fresh measured profile, while the activity log retains the computed values for diagnosis.
+
 ## Login callback correction
 
 The app begins login at Xiaomi Community's `user/login-in?callbackurl=...` gateway. The gateway returns a redirect containing Xiaomi's current signed `login-back` callback. A direct handcrafted Account login callback can authenticate the Xiaomi identity but fails the BBS token exchange with `404 page not found` because its gateway signature/context is missing.

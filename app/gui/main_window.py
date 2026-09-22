@@ -7,9 +7,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont,QIcon,QPixmap
-from PySide6.QtWidgets import (QApplication,QCheckBox,QFileDialog,QFrame,QGridLayout,QHBoxLayout,QInputDialog,QLabel,
+from PySide6.QtWidgets import (QApplication,QFileDialog,QFrame,QGridLayout,QHBoxLayout,QInputDialog,QLabel,
  QMainWindow,QMessageBox,QPlainTextEdit,QPushButton,QScrollArea,QSizePolicy,QVBoxLayout,QWidget)
-from app.gui.attempt_fields import AttemptFields
 from app.auth.browser import LoginWindow,clear_browser_session
 from app.auth.keychain import delete_token,load_token,save_token,storage_error
 from app.auth.linux_sandbox import browser_sandbox_available
@@ -31,8 +30,7 @@ def resource_path(name):
 
 STYLE="""
 QMainWindow, QWidget { background: #111318; color: #e8eaf0; font-family: "Segoe UI", "SF Pro Text", "DejaVu Sans", sans-serif; font-size: 13px; }
-QLabel, QCheckBox { background: transparent; }
-QWidget#attemptFields, QWidget#attemptField { background: transparent; }
+QLabel { background: transparent; }
 QFrame#card { background: #191c23; border: 1px solid #292d37; border-radius: 12px; }
 QLabel#appTitle { font-size: 25px; font-weight: 700; color: #ffffff; }
 QLabel#subtitle { font-size: 12px; color: #8f96a8; }
@@ -48,19 +46,8 @@ QPushButton#primary { background: #ff6900; border-color: #ff7b22; color: white; 
 QPushButton#primary:hover { background: #ff7a1a; }
 QPushButton#danger { color: #ff8181; border-color: #67383d; background: #2b2024; }
 QPushButton#quiet { background: transparent; border-color: #30343d; color: #aeb4c1; }
-QCheckBox { color: #e4e7ed; spacing: 8px; }
-QCheckBox::indicator { width: 17px; height: 17px; }
-QSpinBox { background: #101217; border: 1px solid #343945; border-radius: 7px; padding: 8px 36px 8px 12px; color: white; font-family: Consolas, Menlo, "DejaVu Sans Mono", monospace; font-size: 14px; }
-QSpinBox:focus { border-color: #ff6900; }
-QSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 24px; border-left: 1px solid #343945; border-bottom: 1px solid #343945; border-top-right-radius: 7px; background: #282c35; }
-QSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 24px; border-left: 1px solid #343945; border-bottom-right-radius: 7px; background: #282c35; }
-QSpinBox::up-button:hover, QSpinBox::down-button:hover { background: #424958; }
 QPlainTextEdit { background: #0b0d11; border: 1px solid #292d37; border-radius: 10px; padding: 10px; color: #cdd3df; selection-background-color: #78411e; }
 """
-STYLE += f'''
-QSpinBox::up-arrow {{ image: url("{resource_path("chevron-up.svg").as_posix()}"); width: 12px; height: 8px; }}
-QSpinBox::down-arrow {{ image: url("{resource_path("chevron-down.svg").as_posix()}"); width: 12px; height: 8px; }}
-'''
 
 class Bridge(QObject):
     log=Signal(str); session=Signal(str); done=Signal(str); ntp=Signal(float,float,str); network=Signal(object); network_refresh=Signal(object); network_error=Signal(str)
@@ -112,15 +99,12 @@ class MainWindow(QMainWindow):
         grid.setColumnStretch(1,1); outer.addWidget(timing)
 
         execution=self._card(); execution_layout=QVBoxLayout(execution); execution_layout.setContentsMargins(16,14,16,14); execution_layout.setSpacing(12)
-        top=QHBoxLayout(); section=QLabel("ADAPTIVE EXECUTION"); section.setObjectName("sectionTitle"); top.addWidget(section); top.addStretch()
-        self.adaptive=QCheckBox("Adaptive server-arrival timing"); self.adaptive.setChecked(True); top.addWidget(self.adaptive); execution_layout.addLayout(top)
-        hint=QLabel("Auto-calculated arrival at Xiaomi server, relative to Beijing midnight"); hint.setObjectName("subtitle"); hint.setWordWrap(True); execution_layout.addWidget(hint)
+        section=QLabel("AUTOMATIC EXECUTION"); section.setObjectName("sectionTitle"); execution_layout.addWidget(section)
+        hint=QLabel("Start automatically measures the Xiaomi connection and schedules four independent attempts. No timing setup is required."); hint.setObjectName("subtitle"); hint.setWordWrap(True); execution_layout.addWidget(hint)
         network_row=QHBoxLayout(); network_row.setSpacing(10)
         self.measure_btn=QPushButton("MEASURE XIAOMI NETWORK"); self.measure_btn.setObjectName("quiet")
         self.network_label=QLabel("Not measured — Start will measure automatically (GET only)"); self.network_label.setObjectName("sessionBadge"); self.network_label.setWordWrap(True)
         network_row.addWidget(self.measure_btn); network_row.addWidget(self.network_label,1); execution_layout.addLayout(network_row)
-        self.attempt_fields=AttemptFields(); self.offset_spins=self.attempt_fields.spins
-        execution_layout.addWidget(self.attempt_fields)
         controls=QHBoxLayout(); self.start_btn=QPushButton("START WAITING (LIVE)"); self.cancel_btn=QPushButton("EMERGENCY CANCEL"); self.cancel_btn.setEnabled(False)
         self.start_btn.setObjectName("primary"); self.cancel_btn.setObjectName("danger"); controls.addStretch(); controls.addWidget(self.cancel_btn); controls.addWidget(self.start_btn); execution_layout.addLayout(controls); outer.addWidget(execution)
 
@@ -222,9 +206,7 @@ class MainWindow(QMainWindow):
         self._show_network_profile(profile)
     def _show_network_profile(self,profile):
         self.network_profile=profile; self.network_measured_at=time.monotonic(); self.outbound_ms=profile.outbound_ms
-        for spin,value in zip(self.offset_spins,profile.arrival_offsets_ms): spin.setValue(value)
-        fires=", ".join(f"{value:+.0f}" for value in profile.fire_offsets_ms)
-        self.network_label.setText(f"{profile.quality} • RTT {profile.median_ms:.1f} ms • jitter {profile.jitter_ms:.1f} ms • send [{fires}] ms")
+        self.network_label.setText(f"Automatic schedule ready • 4 attempts • {profile.quality} • RTT {profile.median_ms:.1f} ms • jitter {profile.jitter_ms:.1f} ms")
         self._log(f"Network profile {profile.quality}: {profile.usable}/{profile.attempted} usable, RTT p10/median/p90 {profile.p10_ms:.1f}/{profile.median_ms:.1f}/{profile.p90_ms:.1f} ms, jitter {profile.jitter_ms:.1f} ms, outbound estimate {profile.outbound_ms:.1f} ms")
         self._log(f"Recommended server arrivals: {list(profile.arrival_offsets_ms)} ms; estimated send offsets before midnight: {[round(value,1) for value in profile.fire_offsets_ms]} ms")
     @Slot(str)
@@ -236,19 +218,22 @@ class MainWindow(QMainWindow):
     def start(self):
         try: client=self._get_client()
         except Exception as e: QMessageBox.warning(self,"Cannot start",str(e)); return
-        if self.adaptive.isChecked() and not self._profile_is_fresh():
+        if not self._profile_is_fresh():
             self._log("No fresh network profile; measuring automatically before arming")
             self.measure_network(start_after=True); return
         self._begin_start()
     def _begin_start(self):
         try: client=self._get_client()
         except Exception as e: QMessageBox.warning(self,"Cannot start",str(e)); return
-        self.start_btn.setEnabled(False); self.measure_btn.setEnabled(False); self.cancel_btn.setEnabled(True); arrival_offsets=[s.value() for s in self.offset_spins]; mode="LIVE"
+        if not self._profile_is_fresh():
+            self._log("Network profile expired; measuring again before arming")
+            self.measure_network(start_after=True); return
+        self.start_btn.setEnabled(False); self.measure_btn.setEnabled(False); self.cancel_btn.setEnabled(True); arrival_offsets=list(self.network_profile.arrival_offsets_ms); mode="LIVE"
         self.prepare_cancel.clear(); self._start_caffeinate()
-        self._log(f"Adaptive preparation armed ({mode}); desired server arrivals: {arrival_offsets} ms relative to midnight")
-        threading.Thread(target=self._prepare_and_arm,args=(client,arrival_offsets,mode,self.adaptive.isChecked()),daemon=True).start()
+        self._log(f"Automatic preparation armed ({mode}); desired server arrivals: {arrival_offsets} ms relative to midnight")
+        threading.Thread(target=self._prepare_and_arm,args=(client,arrival_offsets,mode),daemon=True).start()
 
-    def _prepare_and_arm(self,client,arrival_offsets,mode,adaptive):
+    def _prepare_and_arm(self,client,arrival_offsets,mode):
         try:
             midnight=next_beijing_midnight(self.clock)
             seconds=(midnight-self.clock.beijing_now()).total_seconds()
@@ -279,13 +264,13 @@ class MainWindow(QMainWindow):
             if warm:
                 stats=latency_stats(warm); self.outbound_ms=stats.outbound_ms
                 self.bridge.log.emit(f"4-channel warm-up complete; RTT median {stats.median_ms:.1f} ms; outbound estimate {self.outbound_ms:.1f} ms")
-            if adaptive and len(samples)+len(warm)>=4:
+            if len(samples)+len(warm)>=4:
                 final_profile=build_network_profile(samples+warm,attempted=9)
                 self.outbound_ms=final_profile.outbound_ms
                 arrival_offsets=list(final_profile.arrival_offsets_ms)
                 self.bridge.network_refresh.emit(final_profile)
                 self.bridge.log.emit("Timing recommendations refreshed from the final Xiaomi measurements")
-            offsets=fire_offsets_ms(arrival_offsets,self.outbound_ms) if adaptive else [1400,900,400,100]
+            offsets=fire_offsets_ms(arrival_offsets,self.outbound_ms)
             self.bridge.log.emit(f"Scheduler armed ({mode}); computed fire offsets before midnight: {[round(x,1) for x in offsets]} ms")
             self._arm_scheduler(client,arrival_offsets,offsets,midnight)
         except Exception as e:

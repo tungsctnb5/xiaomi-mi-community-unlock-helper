@@ -22,12 +22,9 @@ def main():
     if smoke_test:
         # The frozen-build check never loads credentials or starts network tasks.
         def verify_layout():
-            valid=len(window.offset_spins)==4
-            for spin in window.offset_spins:
-                spin.setValue(-2000)
-                editor=spin.lineEdit(); metrics=editor.fontMetrics()
-                valid=valid and editor.height()>=metrics.height()+2
-                valid=valid and editor.width()>=metrics.horizontalAdvance(spin.text())+4
+            valid=(window.start_btn.isVisible() and window.measure_btn.isVisible()
+                   and not hasattr(window,"offset_spins")
+                   and not hasattr(window,"adaptive"))
             window.close(); app.exit(0 if valid else 1)
         QTimer.singleShot(500,verify_layout)
     return app.exec()
