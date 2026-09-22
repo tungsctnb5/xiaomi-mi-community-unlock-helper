@@ -2,6 +2,7 @@ import json
 import statistics
 import sys
 import threading
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
@@ -17,6 +18,7 @@ from app.scheduler.clock import SyncedClock,next_beijing_midnight
 from app.scheduler.engine import AttemptScheduler
 from app.scheduler.dispatcher import ConcurrentAttemptDispatcher
 from app.scheduler.adaptive import fire_offsets_ms,latency_stats
+from app.scheduler.network_profile import build_network_profile,measure_xiaomi_path
 from app.xiaomi.client import XiaomiClient,stable_device_id
 from app.xiaomi.models import ResultKind
 from app.platform_support import AsyncSleepInhibitor,SleepInhibitor,app_data_dir
@@ -61,18 +63,19 @@ QSpinBox::down-arrow {{ image: url("{resource_path("chevron-down.svg").as_posix(
 '''
 
 class Bridge(QObject):
-    log=Signal(str); session=Signal(str); done=Signal(str); ntp=Signal(float,float,str)
+    log=Signal(str); session=Signal(str); done=Signal(str); ntp=Signal(float,float,str); network=Signal(object); network_refresh=Signal(object); network_error=Signal(str)
 
 class MainWindow(QMainWindow):
     def __init__(self, *, smoke_test=False):
         super().__init__(); self.setWindowTitle("Xiaomi Mi Community Unlock Helper"); self.resize(980,820); self.setMinimumSize(640,460); self.setStyleSheet(STYLE)
         self.clock=SyncedClock(); self.scheduler=AttemptScheduler(self.clock); self.dispatcher=None; self.bridge=Bridge(); self.login_window=None; self.logout_profile=None
         self.prepare_cancel=threading.Event(); self.sleep_inhibitor=AsyncSleepInhibitor() if sys.platform.startswith("linux") else SleepInhibitor(); self.outbound_ms=0.0; self.channels=[]
+        self.network_profile=None; self.network_measured_at=0.0; self.measuring_network=False; self.pending_start=False; self.network_cancel=threading.Event()
         self.token="" if smoke_test else load_token() or ""; self.device_id="smoke-test-only" if smoke_test else stable_device_id(APPDATA/"device_id"); self.client=None
         self.offsets=[]; self._build(); self._wire(); self._tick()
         if smoke_test:
             self.ntp_label.setText("Offline build verification")
-            for button in (self.login_btn,self.logout_btn,self.paste_btn,self.check_btn,self.start_btn): button.setEnabled(False)
+            for button in (self.login_btn,self.logout_btn,self.paste_btn,self.check_btn,self.start_btn,self.measure_btn): button.setEnabled(False)
         else:
             if storage_error(): self._log(storage_error())
             self._sync_ntp()
@@ -111,7 +114,11 @@ class MainWindow(QMainWindow):
         execution=self._card(); execution_layout=QVBoxLayout(execution); execution_layout.setContentsMargins(16,14,16,14); execution_layout.setSpacing(12)
         top=QHBoxLayout(); section=QLabel("ADAPTIVE EXECUTION"); section.setObjectName("sectionTitle"); top.addWidget(section); top.addStretch()
         self.adaptive=QCheckBox("Adaptive server-arrival timing"); self.adaptive.setChecked(True); top.addWidget(self.adaptive); execution_layout.addLayout(top)
-        hint=QLabel("Desired arrival at Xiaomi server, relative to Beijing midnight"); hint.setObjectName("subtitle"); hint.setWordWrap(True); execution_layout.addWidget(hint)
+        hint=QLabel("Auto-calculated arrival at Xiaomi server, relative to Beijing midnight"); hint.setObjectName("subtitle"); hint.setWordWrap(True); execution_layout.addWidget(hint)
+        network_row=QHBoxLayout(); network_row.setSpacing(10)
+        self.measure_btn=QPushButton("MEASURE XIAOMI NETWORK"); self.measure_btn.setObjectName("quiet")
+        self.network_label=QLabel("Not measured — Start will measure automatically (GET only)"); self.network_label.setObjectName("sessionBadge"); self.network_label.setWordWrap(True)
+        network_row.addWidget(self.measure_btn); network_row.addWidget(self.network_label,1); execution_layout.addLayout(network_row)
         self.attempt_fields=AttemptFields(); self.offset_spins=self.attempt_fields.spins
         execution_layout.addWidget(self.attempt_fields)
         controls=QHBoxLayout(); self.start_btn=QPushButton("START WAITING (LIVE)"); self.cancel_btn=QPushButton("EMERGENCY CANCEL"); self.cancel_btn.setEnabled(False)
@@ -126,7 +133,9 @@ class MainWindow(QMainWindow):
         card=QFrame(); card.setObjectName("card"); card.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Minimum); return card
     def _wire(self):
         self.bridge.log.connect(self._log); self.bridge.session.connect(self._set_session); self.bridge.done.connect(self._finished); self.bridge.ntp.connect(lambda o,d,s:self.ntp_label.setText(f"{o*1000:+.3f} ms / {d*1000:.1f} ms ({s})"))
+        self.bridge.network.connect(self._network_ready); self.bridge.network_refresh.connect(self._network_refreshed); self.bridge.network_error.connect(self._network_failed)
         self.login_btn.clicked.connect(self.login); self.logout_btn.clicked.connect(self.logout); self.paste_btn.clicked.connect(self.paste); self.check_btn.clicked.connect(self.check_session); self.start_btn.clicked.connect(self.start); self.cancel_btn.clicked.connect(self.cancel)
+        self.measure_btn.clicked.connect(self.measure_network)
         self.copy_btn.clicked.connect(lambda:QApplication.clipboard().setText(self.logbox.toPlainText())); self.clear_btn.clicked.connect(self.logbox.clear); self.save_btn.clicked.connect(self.save_log)
         timer=QTimer(self); timer.timeout.connect(self._tick); timer.start(50); self.timer=timer
     def _log(self,msg): self.logbox.appendPlainText(f"[{self.clock.beijing_now().strftime('%H:%M:%S.%f')[:-3]}] {redact_text(msg)}")
@@ -153,18 +162,21 @@ class MainWindow(QMainWindow):
             return
         self.login_window=LoginWindow(APPDATA/"browser-profile"); self.login_window.token_found.connect(self._browser_token); self.login_window.show(); self._log("Opened isolated Xiaomi login profile; password remains inside Xiaomi's page")
     def logout(self):
-        self.prepare_cancel.set(); self.scheduler.cancel()
+        self.network_cancel.set(); self.prepare_cancel.set(); self.scheduler.cancel()
         if self.dispatcher: self.dispatcher.cancel(); self.dispatcher.shutdown(); self.dispatcher=None
         self._stop_caffeinate()
         if self.login_window: self.login_window.close(); self.login_window.deleteLater(); self.login_window=None
         deleted=delete_token(); self.token=""; self.client=None; self.channels=[]
+        self.network_profile=None; self.network_measured_at=0.0; self.pending_start=False; self.measuring_network=False
         self.logout_profile=clear_browser_session(APPDATA/"browser-profile",self)
         self._set_session("○ No token — logged out")
+        self.network_label.setText("Not measured — login before measuring")
         self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
         self._log("Logged out: saved token and isolated browser session cleared" if deleted else storage_error())
     @Slot(str)
     def _browser_token(self,token):
-        self.token=token; saved=save_token(token); self._set_session(f"● Token captured: {mask_token(token)}"); self._log(f"new_bbs_serviceToken={token}")
+        self.token=token; self.network_profile=None; self.network_measured_at=0.0; saved=save_token(token); self._set_session(f"● Token captured: {mask_token(token)}"); self._log(f"new_bbs_serviceToken={token}")
+        self.network_label.setText("Not measured — measure this account's Xiaomi connection")
         if not saved: self._log(storage_error())
         QTimer.singleShot(100,self.check_session)
     def paste(self):
@@ -180,10 +192,58 @@ class MainWindow(QMainWindow):
                 result,ms=self._get_client().check_state(); self.bridge.session.emit(f"● {result.kind.value}: {result.message}"); self.bridge.log.emit(f"Session: {result.kind.value} ({ms:.1f} ms); raw={result.raw}")
             except Exception as e: self.bridge.log.emit(str(e))
         threading.Thread(target=work,daemon=True).start()
+    def _profile_is_fresh(self):
+        return self.network_profile is not None and time.monotonic()-self.network_measured_at <= 15*60
+    def measure_network(self, *, start_after=False):
+        if self.measuring_network:
+            if start_after: self.pending_start=True
+            return
+        try: client=self._get_client()
+        except Exception as e: QMessageBox.warning(self,"Cannot measure",str(e)); return
+        self.measuring_network=True; self.pending_start=bool(start_after)
+        self.network_cancel.clear(); self.measure_btn.setEnabled(False); self.start_btn.setEnabled(False); self.cancel_btn.setEnabled(True)
+        self.network_label.setText("Measuring Xiaomi HTTP path… (GET only, no application submitted)")
+        self._log("Network measurement started: 4 warmed channels, 8 timed GET probes; no apply request")
+        threading.Thread(target=self._measure_network_worker,args=(client,),daemon=True).start()
+    def _measure_network_worker(self,client):
+        try:
+            self.bridge.network.emit(measure_xiaomi_path(client,self.network_cancel))
+        except Exception as e: self.bridge.network_error.emit(str(e))
+    @Slot(object)
+    def _network_ready(self,profile):
+        if self.network_cancel.is_set():
+            self._network_failed("Network measurement cancelled"); return
+        self.measuring_network=False; self._show_network_profile(profile)
+        self.measure_btn.setEnabled(True); self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
+        if self.pending_start:
+            self.pending_start=False; self._begin_start()
+    @Slot(object)
+    def _network_refreshed(self,profile):
+        self._show_network_profile(profile)
+    def _show_network_profile(self,profile):
+        self.network_profile=profile; self.network_measured_at=time.monotonic(); self.outbound_ms=profile.outbound_ms
+        for spin,value in zip(self.offset_spins,profile.arrival_offsets_ms): spin.setValue(value)
+        fires=", ".join(f"{value:+.0f}" for value in profile.fire_offsets_ms)
+        self.network_label.setText(f"{profile.quality} • RTT {profile.median_ms:.1f} ms • jitter {profile.jitter_ms:.1f} ms • send [{fires}] ms")
+        self._log(f"Network profile {profile.quality}: {profile.usable}/{profile.attempted} usable, RTT p10/median/p90 {profile.p10_ms:.1f}/{profile.median_ms:.1f}/{profile.p90_ms:.1f} ms, jitter {profile.jitter_ms:.1f} ms, outbound estimate {profile.outbound_ms:.1f} ms")
+        self._log(f"Recommended server arrivals: {list(profile.arrival_offsets_ms)} ms; estimated send offsets before midnight: {[round(value,1) for value in profile.fire_offsets_ms]} ms")
+    @Slot(str)
+    def _network_failed(self,message):
+        self.measuring_network=False; self.pending_start=False
+        self.measure_btn.setEnabled(True); self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
+        self.network_label.setText("Measurement failed — check the session/network and retry")
+        self._log(f"Network measurement failed: {message}")
     def start(self):
         try: client=self._get_client()
         except Exception as e: QMessageBox.warning(self,"Cannot start",str(e)); return
-        self.start_btn.setEnabled(False); self.cancel_btn.setEnabled(True); arrival_offsets=[s.value() for s in self.offset_spins]; mode="LIVE"
+        if self.adaptive.isChecked() and not self._profile_is_fresh():
+            self._log("No fresh network profile; measuring automatically before arming")
+            self.measure_network(start_after=True); return
+        self._begin_start()
+    def _begin_start(self):
+        try: client=self._get_client()
+        except Exception as e: QMessageBox.warning(self,"Cannot start",str(e)); return
+        self.start_btn.setEnabled(False); self.measure_btn.setEnabled(False); self.cancel_btn.setEnabled(True); arrival_offsets=[s.value() for s in self.offset_spins]; mode="LIVE"
         self.prepare_cancel.clear(); self._start_caffeinate()
         self._log(f"Adaptive preparation armed ({mode}); desired server arrivals: {arrival_offsets} ms relative to midnight")
         threading.Thread(target=self._prepare_and_arm,args=(client,arrival_offsets,mode,self.adaptive.isChecked()),daemon=True).start()
@@ -201,20 +261,30 @@ class MainWindow(QMainWindow):
             if self.prepare_cancel.is_set(): return
             samples=[]
             for _ in range(5):
-                result,ms=client.check_state(); samples.append(ms)
+                result,ms=client.check_state()
                 if result.kind in (ResultKind.EXPIRED,ResultKind.INVALID): raise RuntimeError(result.message)
-            stats=latency_stats(samples); self.outbound_ms=stats.outbound_ms
-            self.bridge.log.emit(f"Latency calibration: RTT median {stats.median_ms:.1f} ms, p90 {stats.p90_ms:.1f} ms, jitter {stats.jitter_ms:.1f} ms; estimated outbound {stats.outbound_ms:.1f} ms")
+                if result.kind != ResultKind.NETWORK_ERROR: samples.append(ms)
+            if samples:
+                stats=latency_stats(samples); self.outbound_ms=stats.outbound_ms
+                self.bridge.log.emit(f"Latency calibration: RTT median {stats.median_ms:.1f} ms, p90 {stats.p90_ms:.1f} ms, jitter {stats.jitter_ms:.1f} ms; estimated outbound {stats.outbound_ms:.1f} ms")
             self.channels=[client.new_channel() for _ in arrival_offsets]
             warm=[]; threads=[]
             def warm_one(channel):
-                _,ms=channel.check_state(); warm.append(ms)
+                result,ms=channel.check_state()
+                if result.kind != ResultKind.NETWORK_ERROR: warm.append(ms)
             for channel in self.channels:
                 t=threading.Thread(target=warm_one,args=(channel,),daemon=True); threads.append(t); t.start()
-            for t in threads: t.join(5)
+            deadline=time.monotonic()+20
+            for t in threads: t.join(max(0,deadline-time.monotonic()))
             if warm:
                 stats=latency_stats(warm); self.outbound_ms=stats.outbound_ms
                 self.bridge.log.emit(f"4-channel warm-up complete; RTT median {stats.median_ms:.1f} ms; outbound estimate {self.outbound_ms:.1f} ms")
+            if adaptive and len(samples)+len(warm)>=4:
+                final_profile=build_network_profile(samples+warm,attempted=9)
+                self.outbound_ms=final_profile.outbound_ms
+                arrival_offsets=list(final_profile.arrival_offsets_ms)
+                self.bridge.network_refresh.emit(final_profile)
+                self.bridge.log.emit("Timing recommendations refreshed from the final Xiaomi measurements")
             offsets=fire_offsets_ms(arrival_offsets,self.outbound_ms) if adaptive else [1400,900,400,100]
             self.bridge.log.emit(f"Scheduler armed ({mode}); computed fire offsets before midnight: {[round(x,1) for x in offsets]} ms")
             self._arm_scheduler(client,arrival_offsets,offsets,midnight)
@@ -247,12 +317,13 @@ class MainWindow(QMainWindow):
                 lambda packed: packed[0].terminal,self.scheduler.cancel,dispatch_done)
         self.scheduler.start(offsets,fired,midnight)
     def cancel(self):
+        self.network_cancel.set()
         self.prepare_cancel.set()
         self.scheduler.cancel()
         if self.dispatcher: self.dispatcher.cancel()
         self._log("Emergency cancel requested; in-flight HTTP requests may still finish")
         self._finished("Cancelled")
-    def _finished(self,text): self._stop_caffeinate(); self.start_btn.setEnabled(True); self.cancel_btn.setEnabled(False); self._log(text)
+    def _finished(self,text): self._stop_caffeinate(); self.start_btn.setEnabled(True); self.measure_btn.setEnabled(True); self.cancel_btn.setEnabled(False); self._log(text)
     def _start_caffeinate(self):
         if isinstance(self.sleep_inhibitor,AsyncSleepInhibitor): self.sleep_inhibitor.start(self.bridge.log.emit)
         elif self.sleep_inhibitor.start(): self._log("Sleep prevention enabled")
@@ -260,7 +331,7 @@ class MainWindow(QMainWindow):
     def _stop_caffeinate(self):
         self.sleep_inhibitor.stop()
     def closeEvent(self,event):
-        self.prepare_cancel.set(); self.scheduler.cancel()
+        self.network_cancel.set(); self.prepare_cancel.set(); self.scheduler.cancel()
         if self.dispatcher: self.dispatcher.cancel(); self.dispatcher.shutdown()
         self._stop_caffeinate(); super().closeEvent(event)
     def save_log(self):

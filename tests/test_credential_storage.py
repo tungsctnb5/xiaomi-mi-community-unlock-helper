@@ -74,7 +74,8 @@ def test_gui_keeps_current_token_when_secure_save_fails(monkeypatch):
     monkeypatch.setattr(gui, "save_token", lambda token: False)
     monkeypatch.setattr(gui, "storage_error", lambda: "Secure store unavailable")
     monkeypatch.setattr(gui.QTimer, "singleShot", Mock())
-    window = SimpleNamespace(token="", _set_session=Mock(), _log=Mock(), check_session=Mock())
+    window = SimpleNamespace(token="", _set_session=Mock(), _log=Mock(), check_session=Mock(),
+                             network_label=Mock())
     gui.MainWindow._browser_token(window, "fake-memory-only-token")
     assert window.token == "fake-memory-only-token"
     window._log.assert_any_call("Secure store unavailable")
@@ -87,10 +88,10 @@ def test_gui_logout_clears_active_session_even_if_store_is_locked(monkeypatch):
     monkeypatch.setattr(gui, "delete_token", lambda: False)
     monkeypatch.setattr(gui, "storage_error", lambda: "Unlock keyring and retry Logout")
     monkeypatch.setattr(gui, "clear_browser_session", Mock(return_value=None))
-    window = SimpleNamespace(prepare_cancel=Mock(), scheduler=Mock(), dispatcher=None,
+    window = SimpleNamespace(network_cancel=Mock(), prepare_cancel=Mock(), scheduler=Mock(), dispatcher=None,
                              _stop_caffeinate=Mock(), login_window=None, token="fake-session",
                              client=object(), channels=[object()], _set_session=Mock(),
-                             start_btn=Mock(), cancel_btn=Mock(), _log=Mock())
+                             start_btn=Mock(), cancel_btn=Mock(), network_label=Mock(), _log=Mock())
     gui.MainWindow.logout(window)
     assert not window.token and window.client is None and window.channels == []
     window._log.assert_called_once_with("Unlock keyring and retry Logout")

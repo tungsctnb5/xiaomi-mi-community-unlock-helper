@@ -100,7 +100,7 @@ def test_attempt_text_and_controls_fit_at_window_sizes(app, window, size):
         assert len({spin.width() for spin in window.offset_spins}) <= 2
         for first, second in zip(window.attempt_fields.fields, window.attempt_fields.fields[1:]):
             assert not first.geometry().intersects(second.geometry())
-        for control in (window.adaptive, window.start_btn, window.cancel_btn):
+        for control in (window.adaptive, window.measure_btn, window.start_btn, window.cancel_btn):
             assert control.height() >= control.sizeHint().height()
             assert control.width() >= control.sizeHint().width()
         assert_responsive_columns(window)

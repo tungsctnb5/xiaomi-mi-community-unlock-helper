@@ -20,6 +20,12 @@ Observed community protocol:
 
 Undocumented API warning: response meanings beyond those observed above may change. Unknown payloads are preserved in credential-redacted debug logs instead of being guessed as success.
 
+## Network-specific timing (v1.3.0)
+
+This is an application improvement, not a behavior copied from the community loop. A manual measurement—or Start when no fresh profile exists—creates four keep-alive channels, warms each once, then performs two timed GET rounds for eight measured samples. It never calls the apply endpoint. The profile removes isolated stalls, calculates p10/median/p90 RTT and robust median-absolute-deviation jitter, estimates outbound time as median RTT/2, and widens the four reset-boundary targets when the path is variable. The number of live apply attempts remains exactly four.
+
+The profile is refreshed close to Beijing midnight using the final state checks and warmed live channels. RTT/2 cannot reveal route asymmetry or Xiaomi's internal queue time, so the UI labels it as an estimate and does not promise an exact server-arrival timestamp.
+
 ## Login callback correction
 
 The app begins login at Xiaomi Community's `user/login-in?callbackurl=...` gateway. The gateway returns a redirect containing Xiaomi's current signed `login-back` callback. A direct handcrafted Account login callback can authenticate the Xiaomi identity but fails the BBS token exchange with `404 page not found` because its gateway signature/context is missing.

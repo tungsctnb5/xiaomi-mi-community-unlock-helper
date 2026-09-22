@@ -73,7 +73,9 @@ The token is sent only to `https://sgp-api.buy.mi.com` as required by the Xiaomi
 
 ## Operation
 
-The app is LIVE-only and always requires a valid token before Start. Adaptive mode targets estimated Xiaomi server arrival at `-100, +20, +120, +300 ms` around Beijing midnight. Shortly before reset it re-syncs NTP, measures five state RTTs, estimates outbound delay, opens and warms four independent keep-alive channels, then computes local firing times. RTT/2 is only an estimate because internet routes may be asymmetric; the measured uncertainty is shown in logs. Disabling Adaptive uses the July 2026 fallback at 1400, 900, 400 and 100 ms before midnight.
+The app is LIVE-only and always requires a valid token before Start. **Measure Xiaomi Network** warms four independent keep-alive channels and collects exactly eight timed GET probes from Xiaomi's state endpoint; it never submits an application. The app rejects isolated stalls, reports p10/median/p90 RTT and jitter, then automatically fills four network-specific server-arrival targets and previews their estimated local send offsets. Stable connections keep a compact reset-window pattern, while variable connections receive a wider four-attempt spread.
+
+A profile remains fresh for 15 minutes. If Start is pressed without one, the app measures automatically and continues to waiting when it succeeds. Shortly before reset it re-syncs NTP, samples Xiaomi again, warms the four live request channels and refreshes the recommendation before arming the scheduler. RTT/2 is only an outbound estimate because internet routes can be asymmetric; neither measurement nor timing can guarantee Xiaomi quota or approval. Disabling Adaptive uses the July 2026 fallback at 1400, 900, 400 and 100 ms before midnight.
 
 Each firing dispatches its HTTP request to an independent worker, so a slow earlier response cannot delay a later target. Workers share one logical Xiaomi account session, token and stable device identity, while each owns a warmed network channel. Each Start creates at most four requests. Terminal replies stop targets that have not fired yet; requests already in flight cannot be recalled. `QUOTA FULL` does not cancel later attempts because an early request may still be observing the previous quota window. The app prevents system sleep while armed and releases that assertion on completion or Cancel. An accepted POST is labelled as accepted first, then the account state is queried again before authorization is called confirmed.
 
@@ -81,7 +83,7 @@ Use this only for your own account and device, within Xiaomi's terms and local l
 
 ## Tests
 
-Tests use mock sessions and fake tokens only. They cover redaction, state/apply parsing, expiry, quota, NTP offset, four finite firings, cancellation, terminal stop, and timeout handling.
+Tests use mock sessions and fake tokens only. They cover redaction, state/apply parsing, expiry, quota, NTP offset, robust network profiling, outlier rejection, stable/variable recommendations, GET-only measurement, exactly four finite firings, cancellation, terminal stop, and timeout handling.
 
 Windows builds also check the displayed layout at 100%, 125%, 150%, and 200% scaling, including window resizing, text visibility, and keyboard/step-button editing. The packaged executable runs an offline `--smoke-test` before it is archived; this check does not load credentials or contact Xiaomi/NTP.
 
